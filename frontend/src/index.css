@@ -1,0 +1,135 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-heading: 'Fredoka', 'Plus Jakarta Sans', sans-serif;
+    --font-body: 'Plus Jakarta Sans', sans-serif;
+  }
+
+  body {
+    font-family: var(--font-body);
+    background-color: #3A2419;
+    background-image: 
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+    background-size: 28px 28px;
+    color: #111111;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading);
+    letter-spacing: -0.01em;
+  }
+}
+
+/* Neo-Brutalist Tactile System matching reference image */
+.neo-card {
+  background-color: #FFFFFF;
+  border: 3.5px solid #000000;
+  border-radius: 28px;
+  box-shadow: 6px 6px 0px #000000;
+}
+
+.neo-card-sm {
+  background-color: #FFFFFF;
+  border: 3px solid #000000;
+  border-radius: 20px;
+  box-shadow: 4px 4px 0px #000000;
+}
+
+.neo-panel-orange {
+  background-color: #FF8038;
+  border: 3.5px solid #000000;
+  border-radius: 30px;
+  box-shadow: 6px 6px 0px #000000;
+}
+
+.neo-btn-green {
+  background-color: #00A843;
+  color: #FFFFFF;
+  border: 3px solid #000000;
+  border-radius: 9999px;
+  box-shadow: 4px 4px 0px #000000;
+  font-family: var(--font-heading);
+  transition: all 0.15s ease;
+}
+
+.neo-btn-green:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0px #000000;
+}
+
+.neo-btn-green:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0px #000000;
+}
+
+.neo-btn-white {
+  background-color: #FFFFFF;
+  color: #000000;
+  border: 3px solid #000000;
+  border-radius: 9999px;
+  box-shadow: 4px 4px 0px #000000;
+  font-family: var(--font-heading);
+  transition: all 0.15s ease;
+}
+
+.neo-btn-white:hover {
+  background-color: #F8FAFC;
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0px #000000;
+}
+
+.neo-btn-white:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0px #000000;
+}
+
+.neo-btn-black {
+  background-color: #111111;
+  color: #FFFFFF;
+  border: 3px solid #000000;
+  border-radius: 9999px;
+  box-shadow: 4px 4px 0px #000000;
+  font-family: var(--font-heading);
+  transition: all 0.15s ease;
+}
+
+.neo-btn-black:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0px #000000;
+}
+
+.neo-btn-black:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0px #000000;
+}
+
+.neo-input {
+  background-color: #FFFFFF;
+  border: 3px solid #000000;
+  border-radius: 9999px;
+  box-shadow: 3px 3px 0px #000000;
+  font-family: var(--font-body);
+}
+
+.neo-input:focus {
+  outline: none;
+  border-color: #000000;
+  box-shadow: 5px 5px 0px #000000;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #3A2419;
+}
+::-webkit-scrollbar-thumb {
+  background: #FF8038;
+  border: 2px solid #000000;
+  border-radius: 5px;
+}

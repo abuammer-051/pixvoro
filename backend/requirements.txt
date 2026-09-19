@@ -1,0 +1,6 @@
+yt-dlp>=2026.8.19
+fastapi>=0.141.0
+uvicorn>=0.41.0
+pydantic>=2.13.0
+python-multipart>=0.0.32
+curl-cffi>=0.16.3
