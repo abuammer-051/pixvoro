@@ -72,6 +72,9 @@ COMMON_YDL_OPTS = {
     'js_runtimes': {'node': {}},
     'remote_components': {'ejs:github': {}},
     'extractor_args': {
+        'youtubepot-bgutilscript': {
+            'server_home': '/opt/bgutil-ytdlp-pot-provider/server'
+        },
         'tiktok': {
             'app_version': ['20.2.1'],
             'manifest_app_version': ['221']
