@@ -91,12 +91,22 @@ COMMON_YDL_OPTS = {
 # server-side fallback. A cookies file can be supplied as a Render secret at
 # /etc/secrets/youtube_cookies.txt (or via YOUTUBE_COOKIES_FILE).
 YOUTUBE_COOKIES_FILE = os.getenv("YOUTUBE_COOKIES_FILE", "/etc/secrets/youtube_cookies.txt")
+YOUTUBE_RUNTIME_COOKIES = os.path.join(TEMP_DOWNLOAD_DIR, ".youtube_cookies.txt")
 
 def youtube_opts(url: str, opts: Dict[str, Any], fallback: bool = False) -> Dict[str, Any]:
     if "youtube.com" not in url.lower() and "youtu.be" not in url.lower():
         return opts
     if os.path.isfile(YOUTUBE_COOKIES_FILE):
-        opts["cookiefile"] = YOUTUBE_COOKIES_FILE
+        # Render secret files are read-only; yt-dlp may create a cookie lock
+        # beside the file, so copy it to the writable temp directory first.
+        try:
+            if (not os.path.isfile(YOUTUBE_RUNTIME_COOKIES)
+                    or os.path.getmtime(YOUTUBE_RUNTIME_COOKIES) < os.path.getmtime(YOUTUBE_COOKIES_FILE)):
+                import shutil
+                shutil.copyfile(YOUTUBE_COOKIES_FILE, YOUTUBE_RUNTIME_COOKIES)
+            opts["cookiefile"] = YOUTUBE_RUNTIME_COOKIES
+        except OSError as exc:
+            logger.warning("Unable to prepare YouTube cookies: %s", exc)
     proxy = os.getenv("YOUTUBE_PROXY")
     if proxy:
         opts["proxy"] = proxy
