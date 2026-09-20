@@ -83,6 +83,37 @@ COMMON_YDL_OPTS = {
     }
 }
 
+# YouTube increasingly challenges requests from datacenter IPs. Keep the
+# default extractor first, then use less-restricted first-party clients as a
+# server-side fallback. A cookies file can be supplied as a Render secret at
+# /etc/secrets/youtube_cookies.txt (or via YOUTUBE_COOKIES_FILE).
+YOUTUBE_COOKIES_FILE = os.getenv("YOUTUBE_COOKIES_FILE", "/etc/secrets/youtube_cookies.txt")
+
+def youtube_opts(url: str, opts: Dict[str, Any], fallback: bool = False) -> Dict[str, Any]:
+    if "youtube.com" not in url.lower() and "youtu.be" not in url.lower():
+        return opts
+    if os.path.isfile(YOUTUBE_COOKIES_FILE):
+        opts["cookiefile"] = YOUTUBE_COOKIES_FILE
+    proxy = os.getenv("YOUTUBE_PROXY")
+    if proxy:
+        opts["proxy"] = proxy
+    if fallback:
+        opts.setdefault("extractor_args", {})["youtube"] = {
+            "player_client": ["android_vr", "web_embedded"]
+        }
+    return opts
+
+def extract_info_with_youtube_fallback(url: str, opts: Dict[str, Any], download: bool = False):
+    try:
+        with yt_dlp.YoutubeDL(youtube_opts(url, dict(opts))) as ydl:
+            return ydl.extract_info(url, download=download), ydl
+    except Exception:
+        if "youtube.com" not in url.lower() and "youtu.be" not in url.lower():
+            raise
+        fallback_opts = youtube_opts(url, dict(opts), fallback=True)
+        with yt_dlp.YoutubeDL(fallback_opts) as ydl:
+            return ydl.extract_info(url, download=download), ydl
+
 def sanitize_filename(name: str) -> str:
     """Sanitize filename to prevent directory traversal or invalid Windows/Linux characters."""
     clean = re.sub(r'[\\/*?:"<>|#%&{}\\<>*?/$!\'":@+`|=]', "", name)
@@ -197,8 +228,7 @@ def get_video_info(url: str) -> Dict[str, Any]:
     ydl_opts['extract_flat'] = False
 
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
+        info, _ = extract_info_with_youtube_fallback(url, ydl_opts, download=False)
     except Exception as e:
         logger.error(f"Error extracting info for {url}: {str(e)}")
         raise ValueError(f"Unable to fetch video information: {str(e)}")
@@ -385,8 +415,7 @@ def download_video_file(url: str, format_id: str, is_audio: bool = False) -> tup
     if format_id == "image_orig":
         ydl_opts = dict(COMMON_YDL_OPTS)
         ydl_opts['skip_download'] = True
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
+        info, _ = extract_info_with_youtube_fallback(url, ydl_opts, download=False)
         img_url = info.get('thumbnail')
         if not img_url and info.get('thumbnails'):
             img_url = info['thumbnails'][-1].get('url')
@@ -429,9 +458,8 @@ def download_video_file(url: str, format_id: str, is_audio: bool = False) -> tup
     elif not is_audio:
         ydl_opts['merge_output_format'] = 'mp4'
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
-        filename = ydl.prepare_filename(info)
+    info, ydl = extract_info_with_youtube_fallback(url, ydl_opts, download=True)
+    filename = ydl.prepare_filename(info)
 
     if is_audio and format_id != "m4a" and not filename.endswith('.mp3'):
         base, _ = os.path.splitext(filename)
