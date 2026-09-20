@@ -6,11 +6,12 @@ RUN npm install
 COPY frontend/ ./
 RUN npm run build
 
-# Stage 2: Production Python Backend with ffmpeg
+# Stage 2: Production Python Backend with ffmpeg & nodejs
 FROM python:3.11-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     curl \
+    nodejs \
     ca-certificates \
     git \
     build-essential \
@@ -44,4 +45,4 @@ RUN mkdir -p /app/temp_downloads
 ENV PORT=8000
 EXPOSE 8000
 
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT}"]
+CMD ["sh", "-c", "(node /opt/bgutil-ytdlp-pot-provider/server/build/index.js &) 2>/dev/null; uvicorn main:app --host 0.0.0.0 --port ${PORT}"]

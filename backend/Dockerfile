@@ -1,9 +1,10 @@
 FROM python:3.11-slim
 
-# Install system dependencies: ffmpeg, curl
+# Install system dependencies: ffmpeg, curl, nodejs (needed by yt-dlp for YouTube JS challenges)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     curl \
+    nodejs \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 

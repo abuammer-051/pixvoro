@@ -28,7 +28,7 @@ try:
                 r = c_requests.get(url, params=params, headers=headers, impersonate='chrome120', timeout=8)
                 if r.status_code == 200:
                     data = r.json()
-                    if 'resource_response' in data:
+                    if 'resource_response' in data and data['resource_response'].get('data'):
                         return data['resource_response']
             except Exception as e:
                 logger.warning(f"curl_cffi fetch failed for Pinterest mirror {host}: {e}")
@@ -47,13 +47,13 @@ try:
                 ], capture_output=True, text=True, errors='ignore')
                 if res.returncode == 0 and res.stdout.strip():
                     data = json.loads(res.stdout)
-                    if 'resource_response' in data:
+                    if 'resource_response' in data and data['resource_response'].get('data'):
                         return data['resource_response']
             except Exception as e:
                 logger.warning(f"curl fallback failed for {host}: {e}")
                 continue
 
-        raise ValueError(f"Unable to fetch Pinterest metadata for pin {video_id}")
+        raise ValueError(f"Unable to fetch Pinterest metadata for pin {video_id} (Pin may be private or deleted)")
 
     PinterestIE._call_api = _patched_pinterest_call_api
 except Exception as e:
@@ -65,6 +65,20 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMP_DOWNLOAD_DIR = os.path.join(BASE_DIR, "temp_downloads")
 os.makedirs(TEMP_DOWNLOAD_DIR, exist_ok=True)
 
+# Cookie handling for datacenter IPs (e.g. Render/AWS/GCP)
+YOUTUBE_COOKIES_FILE = os.getenv("YOUTUBE_COOKIES_FILE", "/etc/secrets/youtube_cookies.txt")
+YOUTUBE_RUNTIME_COOKIES = os.path.join(TEMP_DOWNLOAD_DIR, ".youtube_cookies.txt")
+
+# Check raw cookie environment variable
+cookies_env = os.environ.get("YOUTUBE_COOKIES")
+if cookies_env:
+    try:
+        with open(YOUTUBE_RUNTIME_COOKIES, "w", encoding="utf-8") as f:
+            f.write(cookies_env)
+        logger.info("Loaded YouTube cookies from YOUTUBE_COOKIES environment variable.")
+    except Exception as e:
+        logger.warning(f"Failed to write cookies from env var: {e}")
+
 COMMON_YDL_OPTS = {
     'quiet': True,
     'no_warnings': True,
@@ -72,6 +86,10 @@ COMMON_YDL_OPTS = {
     'js_runtimes': {'node': {}},
     'remote_components': {'ejs:github': {}},
     'extractor_args': {
+        'youtube': {
+            'player_client': ['visionos', 'android'],
+            'player_skip': ['webpage', 'configs'],
+        },
         'youtubepot-bgutilscript': {
             'server_home': '/opt/bgutil-ytdlp-pot-provider/server'
         },
@@ -86,19 +104,10 @@ COMMON_YDL_OPTS = {
     }
 }
 
-# YouTube increasingly challenges requests from datacenter IPs. Keep the
-# default extractor first, then use less-restricted first-party clients as a
-# server-side fallback. A cookies file can be supplied as a Render secret at
-# /etc/secrets/youtube_cookies.txt (or via YOUTUBE_COOKIES_FILE).
-YOUTUBE_COOKIES_FILE = os.getenv("YOUTUBE_COOKIES_FILE", "/etc/secrets/youtube_cookies.txt")
-YOUTUBE_RUNTIME_COOKIES = os.path.join(TEMP_DOWNLOAD_DIR, ".youtube_cookies.txt")
-
 def youtube_opts(url: str, opts: Dict[str, Any], fallback: bool = False) -> Dict[str, Any]:
     if "youtube.com" not in url.lower() and "youtu.be" not in url.lower():
         return opts
     if os.path.isfile(YOUTUBE_COOKIES_FILE):
-        # Render secret files are read-only; yt-dlp may create a cookie lock
-        # beside the file, so copy it to the writable temp directory first.
         try:
             if (not os.path.isfile(YOUTUBE_RUNTIME_COOKIES)
                     or os.path.getmtime(YOUTUBE_RUNTIME_COOKIES) < os.path.getmtime(YOUTUBE_COOKIES_FILE)):
@@ -107,12 +116,16 @@ def youtube_opts(url: str, opts: Dict[str, Any], fallback: bool = False) -> Dict
             opts["cookiefile"] = YOUTUBE_RUNTIME_COOKIES
         except OSError as exc:
             logger.warning("Unable to prepare YouTube cookies: %s", exc)
+    elif os.path.isfile(YOUTUBE_RUNTIME_COOKIES) and os.path.getsize(YOUTUBE_RUNTIME_COOKIES) > 0:
+        opts["cookiefile"] = YOUTUBE_RUNTIME_COOKIES
+
     proxy = os.getenv("YOUTUBE_PROXY")
     if proxy:
         opts["proxy"] = proxy
     if fallback:
         opts.setdefault("extractor_args", {})["youtube"] = {
-            "player_client": ["android_vr", "web_embedded"]
+            "player_client": ["android"],
+            "player_skip": ["webpage", "configs"]
         }
     return opts
 
@@ -120,10 +133,15 @@ def extract_info_with_youtube_fallback(url: str, opts: Dict[str, Any], download:
     try:
         with yt_dlp.YoutubeDL(youtube_opts(url, dict(opts))) as ydl:
             return ydl.extract_info(url, download=download), ydl
-    except Exception:
+    except Exception as e:
         if "youtube.com" not in url.lower() and "youtu.be" not in url.lower():
             raise
+        logger.warning(f"Primary YouTube extraction failed: {e}. Retrying with android fallback...")
         fallback_opts = youtube_opts(url, dict(opts), fallback=True)
+        if download and not fallback_opts.get('postprocessors'):
+            fallback_opts['format'] = "bestvideo+bestaudio/best"
+        elif download and fallback_opts.get('postprocessors'):
+            fallback_opts['format'] = "bestaudio/best"
         with yt_dlp.YoutubeDL(fallback_opts) as ydl:
             return ydl.extract_info(url, download=download), ydl
 
@@ -244,7 +262,23 @@ def get_video_info(url: str) -> Dict[str, Any]:
         info, _ = extract_info_with_youtube_fallback(url, ydl_opts, download=False)
     except Exception as e:
         logger.error(f"Error extracting info for {url}: {str(e)}")
-        raise ValueError(f"Unable to fetch video information: {str(e)}")
+        # If it's YouTube, retry with dedicated android client fallback
+        if "youtube.com" in url.lower() or "youtu.be" in url.lower():
+            try:
+                fallback_opts = dict(ydl_opts)
+                fallback_opts['extractor_args'] = {
+                    'youtube': {
+                        'player_client': ['android'],
+                        'player_skip': ['webpage', 'configs']
+                    }
+                }
+                with yt_dlp.YoutubeDL(fallback_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+            except Exception as e2:
+                logger.error(f"YouTube fallback extraction failed: {str(e2)}")
+                raise ValueError(f"Unable to fetch video information: {str(e)}")
+        else:
+            raise ValueError(f"Unable to fetch video information: {str(e)}")
 
     if not info:
         raise ValueError("No video information found for this URL.")
